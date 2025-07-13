@@ -2,63 +2,55 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>HeroAlert Emergency Globe</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
   <style>
     body {
       margin: 0;
       background: black;
-      color: white;
       font-family: sans-serif;
+      color: white;
       text-align: center;
     }
-
     h1 {
-      margin: 0;
-      padding: 1rem;
+      margin: 1rem;
     }
-
     #map {
-      width: 90vw;
+      width: 90%;
       height: 70vh;
-      margin: 1rem auto;
+      margin: auto;
       border-radius: 1rem;
     }
-
-    input[type="text"] {
-      padding: 0.5rem;
-      width: 60%;
+    #noteInput {
+      padding: 0.6rem;
       font-size: 1rem;
-      border-radius: 5px;
       border: none;
-      margin-bottom: 1rem;
+      width: 80%;
+      margin: 1rem auto;
+      display: block;
+      border-radius: 6px;
     }
-
-    button {
-      font-size: 1.1rem;
-      padding: 0.7rem 1.5rem;
+    #sosButton, #cancelButton {
+      font-size: 1rem;
+      padding: 0.6rem 2rem;
+      margin: 0.5rem;
       border: none;
+      border-radius: 6px;
       cursor: pointer;
-      border-radius: 5px;
     }
-
     #sosButton {
-      background: red;
+      background-color: red;
       color: white;
-      margin-bottom: 1rem;
     }
-
     #cancelButton {
-      background: gray;
+      background-color: gray;
       color: white;
       display: none;
     }
-
     #status {
-      font-size: 1rem;
+      margin: 1rem auto;
       color: yellow;
-      margin-top: 1rem;
     }
   </style>
 </head>
@@ -67,55 +59,62 @@
   <div id="map"></div>
 
   <input type="text" id="noteInput" placeholder="Add a short note or ID for this alert..." />
-  <br />
-  <button id="sosButton">🚨 I NEED HELP</button>
-  <button id="cancelButton">❌ Cancel SOS</button>
+  <button id="sosButton" onclick="triggerSOS()">🚨 I NEED HELP</button>
+  <button id="cancelButton" onclick="cancelSOS()">Cancel Alert</button>
 
   <div id="status">No SOS active</div>
 
-  <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
-    const map = L.map("map").setView([52.6369, -1.1398], 6); // UK default (Leicester)
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 18,
+    let map = L.map('map').setView([54.5, -3], 5.5); // UK-centered
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
-    const sosButton = document.getElementById("sosButton");
-    const cancelButton = document.getElementById("cancelButton");
-    const statusText = document.getElementById("status");
-    const noteInput = document.getElementById("noteInput");
+    let marker = null;
+    let alertActive = false;
 
-    let marker;
+    async function triggerSOS() {
+      if (alertActive) return;
 
-    sosButton.onclick = () => {
-      if (!navigator.geolocation) {
-        statusText.textContent = "Geolocation not supported.";
-        return;
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(pos => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          const note = document.getElementById('noteInput').value || "Unnamed alert";
+
+          if (marker) map.removeLayer(marker);
+          marker = L.marker([lat, lng]).addTo(map)
+            .bindPopup(`<b>SOS ALERT</b><br>${note}`).openPopup();
+
+          map.setView([lat, lng], 13);
+
+          document.getElementById('status').textContent = "🚨 SOS sent!";
+          document.getElementById('sosButton').style.display = 'none';
+          document.getElementById('cancelButton').style.display = 'inline-block';
+          alertActive = true;
+        }, err => {
+          document.getElementById('status').textContent = "Geolocation failed.";
+        });
+      } else {
+        document.getElementById('status').textContent = "Geolocation not supported.";
+      }
+    }
+
+    function cancelSOS() {
+      if (!alertActive) return;
+
+      if (marker) {
+        map.removeLayer(marker);
+        marker = null;
       }
 
-      navigator.geolocation.getCurrentPosition((pos) => {
-        const lat = pos.coords.latitude;
-        const lon = pos.coords.longitude;
-        const note = noteInput.value || "Unlabeled Alert";
-
-        if (marker) map.removeLayer(marker);
-        marker = L.marker([lat, lon]).addTo(map).bindPopup(`🆘 ${note}`).openPopup();
-
-        map.setView([lat, lon], 14);
-        statusText.textContent = `🆘 SOS Active: ${note}`;
-        sosButton.style.display = "none";
-        cancelButton.style.display = "inline-block";
-      });
-    };
-
-    cancelButton.onclick = () => {
-      if (marker) map.removeLayer(marker);
-      marker = null;
-      statusText.textContent = "No SOS active";
-      sosButton.style.display = "inline-block";
-      cancelButton.style.display = "none";
-      noteInput.value = "";
-    };
+      document.getElementById('status').textContent = "No SOS active";
+      document.getElementById('sosButton').style.display = 'inline-block';
+      document.getElementById('cancelButton').style.display = 'none';
+      document.getElementById('noteInput').value = '';
+      alertActive = false;
+    }
   </script>
 </body>
 </html>
