@@ -4,118 +4,140 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>HeroAlert Emergency Globe</title>
-  <link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet" />
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"
+  />
   <style>
     body {
       margin: 0;
+      font-family: sans-serif;
       background: black;
       color: white;
-      font-family: sans-serif;
       display: flex;
       flex-direction: column;
       align-items: center;
     }
+
     h1 {
-      margin: 1rem 0;
+      margin: 1rem;
+      font-size: 1.7rem;
     }
+
     #map {
-      height: 80vh;
-      width: 95vw;
-      border-radius: 10px;
+      width: 90vw;
+      height: 70vh;
       margin-bottom: 1rem;
+      border-radius: 1rem;
     }
-    #status {
-      color: yellow;
-      margin-bottom: 1rem;
-    }
-    #controls {
-      display: flex;
-      gap: 1rem;
-    }
-    button {
-      padding: 1rem 1.5rem;
-      font-size: 1rem;
-      border-radius: 5px;
+
+    .btn {
+      padding: 0.8rem 1.5rem;
+      font-size: 1.2rem;
+      margin: 0.5rem;
       border: none;
+      border-radius: 5px;
       cursor: pointer;
     }
-    .sos {
-      background: red;
+
+    #sosBtn {
+      background-color: red;
       color: white;
     }
-    .cancel {
-      background: gray;
+
+    #cancelBtn {
+      background-color: #444;
       color: white;
       display: none;
     }
+
+    #status {
+      margin-top: 0.5rem;
+      font-size: 1rem;
+      color: yellow;
+    }
+
     #noteInput {
-      margin-bottom: 1rem;
       padding: 0.5rem;
-      border-radius: 5px;
+      font-size: 1rem;
       width: 90%;
+      max-width: 400px;
+      margin-top: 1rem;
+      border-radius: 5px;
+      border: none;
     }
   </style>
 </head>
 <body>
   <h1>🌍 HeroAlert Emergency Globe</h1>
+
   <div id="map"></div>
-  <div id="status">No SOS active</div>
-  <input type="text" id="noteInput" placeholder="Add a note (optional)" />
-  <div id="controls">
-    <button class="sos" id="sosBtn">🚨 I NEED HELP</button>
-    <button class="cancel" id="cancelBtn">Cancel Alert</button>
+
+  <input type="text" id="noteInput" placeholder="Add a short note or ID for this alert..." />
+
+  <div>
+    <button class="btn" id="sosBtn">🚨 I NEED HELP</button>
+    <button class="btn" id="cancelBtn">❌ Cancel Alert</button>
   </div>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <p id="status">No SOS active</p>
+
+  <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
   <script>
-    const sosBtn = document.getElementById('sosBtn');
-    const cancelBtn = document.getElementById('cancelBtn');
-    const statusDiv = document.getElementById('status');
-    const noteInput = document.getElementById('noteInput');
-    let userMarker;
+    const map = L.map("map").setView([52.6369, -1.1398], 6); // UK center
 
-    const map = L.map('map').setView([51.509865, -0.118092], 5); // Center on UK
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap contributors'
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap contributors",
     }).addTo(map);
 
-    function triggerSOS() {
+    let sosMarker = null;
+
+    const sosBtn = document.getElementById("sosBtn");
+    const cancelBtn = document.getElementById("cancelBtn");
+    const status = document.getElementById("status");
+    const noteInput = document.getElementById("noteInput");
+
+    sosBtn.addEventListener("click", () => {
       if (!navigator.geolocation) {
-        alert('Geolocation not supported');
+        status.textContent = "Geolocation not supported.";
         return;
       }
 
-      navigator.geolocation.getCurrentPosition(position => {
-        const lat = position.coords.latitude;
-        const lon = position.coords.longitude;
-        const note = noteInput.value || 'No note';
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          const note = noteInput.value || "No note provided";
 
-        if (userMarker) map.removeLayer(userMarker);
-        userMarker = L.marker([lat, lon])
-          .addTo(map)
-          .bindPopup(`<b>SOS Alert</b><br>${note}`)
-          .openPopup();
+          if (sosMarker) map.removeLayer(sosMarker);
 
-        map.setView([lat, lon], 13);
+          sosMarker = L.marker([latitude, longitude])
+            .addTo(map)
+            .bindPopup(`<b>SOS!</b><br>${note}`)
+            .openPopup();
 
-        statusDiv.innerText = '🚨 SOS Active';
-        sosBtn.style.display = 'none';
-        cancelBtn.style.display = 'inline-block';
-      }, err => {
-        alert('Unable to access location');
-      });
-    }
+          map.setView([latitude, longitude], 14);
 
-    function cancelSOS() {
-      if (userMarker) map.removeLayer(userMarker);
-      statusDiv.innerText = 'No SOS active';
-      sosBtn.style.display = 'inline-block';
-      cancelBtn.style.display = 'none';
-    }
+          status.textContent = "🚨 SOS Active!";
+          sosBtn.style.display = "none";
+          cancelBtn.style.display = "inline-block";
+        },
+        () => {
+          status.textContent = "Unable to retrieve your location.";
+        }
+      );
+    });
 
-    sosBtn.addEventListener('click', triggerSOS);
-    cancelBtn.addEventListener('click', cancelSOS);
+    cancelBtn.addEventListener("click", () => {
+      if (sosMarker) {
+        map.removeLayer(sosMarker);
+        sosMarker = null;
+      }
+
+      noteInput.value = "";
+      status.textContent = "No SOS active";
+      sosBtn.style.display = "inline-block";
+      cancelBtn.style.display = "none";
+    });
   </script>
 </body>
 </html>
