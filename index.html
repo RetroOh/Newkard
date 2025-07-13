@@ -8,7 +8,7 @@
   <style>
     body { margin: 0; background: #000; color: white; font-family: sans-serif; }
     h1 { text-align: center; margin: 10px; }
-    #map { height: 80vh; margin: 0 5%; border-radius: 15px; }
+    #map { height: 60vh; margin: 0 5%; border-radius: 15px; }
     .btns { display: flex; justify-content: center; margin-top: 10px; flex-direction: column; align-items: center; }
     input, button, select { padding: 10px; font-size: 16px; margin: 5px; border-radius: 8px; border: none; }
     #note { width: 70%; }
@@ -18,12 +18,13 @@
     .respond-btn { background: green; color: white; margin-top: 5px; display: block; }
     .footer { text-align: center; margin-top: 10px; color: yellow; font-size: 14px; }
     .media-img { max-width: 100px; max-height: 100px; border-radius: 10px; border: 1px solid #fff; }
-    iframe { width: 100%; height: 300px; border: none; margin-top: 10px; }
+    iframe { width: 90%; height: 300px; border: none; margin: 20px auto; display: block; border-radius: 10px; }
   </style>
 </head>
 <body>
   <h1>🌐 HeroAlert Emergency Globe</h1>
   <div id="map"></div>
+  <div id="streetview"></div>
   <div class="btns">
     <input type="text" id="note" placeholder="Add a short note or ID for this alert...">
     <input type="file" accept="image/*" id="photo">
@@ -35,7 +36,6 @@
     </select>
   </div>
   <div class="footer" id="status">No SOS active</div>
-  <div id="streetview"></div>
 
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -64,19 +64,16 @@
 
     async function triggerSOS() {
       if (!navigator.geolocation) return alert("Enable location!");
-
       navigator.geolocation.getCurrentPosition(async (position) => {
         const { latitude, longitude } = position.coords;
         const note = document.getElementById("note").value;
         const file = document.getElementById("photo").files[0];
-
         let photoURL = null;
         if (file) {
           const ref = storage.ref(`sos_photos/${Date.now()}_${file.name}`);
           await ref.put(file);
           photoURL = await ref.getDownloadURL();
         }
-
         await db.collection("sos_alerts").add({
           lat: latitude,
           lng: longitude,
@@ -93,7 +90,7 @@
     }
 
     function showStreetView(lat, lng) {
-      const embedURL = `https://kartaview.org/map/@${lat},${lng},17z`; // basic link to KartaView
+      const embedURL = `https://kartaview.org/map/@${lat},${lng},17z`;
       document.getElementById("streetview").innerHTML = `<iframe src="${embedURL}"></iframe>`;
     }
 
@@ -112,7 +109,7 @@
     });
 
     function respondToSOS(lat, lng) {
-      map.setView([lat, lng], 16);
+      map.setView([lat, lng], 17);
       showStreetView(lat, lng);
       updateResponderStatus();
     }
