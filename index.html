@@ -2,145 +2,126 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>HeroAlert Emergency Globe</title>
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"
-  />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <style>
     body {
       margin: 0;
       font-family: sans-serif;
       background: black;
       color: white;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: flex-start;
-    }
-
-    h1 {
-      margin: 1rem;
-      font-size: 1.7rem;
       text-align: center;
     }
 
-    #map {
-      width: 90vw;
-      height: 70vh;
-      margin-bottom: 1rem;
-      border-radius: 1rem;
+    h1 {
+      margin-top: 1rem;
     }
 
-    .btn {
-      padding: 0.8rem 1.5rem;
+    #map {
+      width: 90%;
+      height: 500px;
+      margin: 1rem auto;
+      border-radius: 12px;
+    }
+
+    #note {
+      padding: 10px;
+      font-size: 1rem;
+      width: 60%;
+      max-width: 400px;
+      margin-top: 1rem;
+    }
+
+    #sosButton, #cancelButton {
+      margin: 1rem 0.5rem;
+      padding: 12px 20px;
       font-size: 1.2rem;
-      margin: 0.5rem;
+      font-weight: bold;
       border: none;
-      border-radius: 5px;
+      border-radius: 6px;
       cursor: pointer;
     }
 
-    #sosBtn {
+    #sosButton {
       background-color: red;
       color: white;
     }
 
-    #cancelBtn {
-      background-color: #444;
+    #cancelButton {
+      background-color: gray;
       color: white;
       display: none;
     }
 
     #status {
-      margin-top: 0.5rem;
       font-size: 1rem;
+      margin-top: 10px;
       color: yellow;
-      text-align: center;
-    }
-
-    #noteInput {
-      padding: 0.5rem;
-      font-size: 1rem;
-      width: 90%;
-      max-width: 400px;
-      margin-top: 1rem;
-      border-radius: 5px;
-      border: none;
     }
   </style>
 </head>
 <body>
   <h1>🌍 HeroAlert Emergency Globe</h1>
-
   <div id="map"></div>
 
-  <input type="text" id="noteInput" placeholder="Add a short note or ID for this alert..." />
+  <input type="text" id="note" placeholder="Add a short note or ID for this alert..." />
+  <br />
+  <button id="sosButton" onclick="triggerSOS()">🚨 I NEED HELP</button>
+  <button id="cancelButton" onclick="cancelSOS()">Cancel</button>
+  <div id="status">No SOS active</div>
 
-  <div>
-    <button class="btn" id="sosBtn">🚨 I NEED HELP</button>
-    <button class="btn" id="cancelBtn">❌ Cancel Alert</button>
-  </div>
-
-  <!-- ✅ SINGLE status element -->
- 
-
-  <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    const map = L.map("map").setView([52.6369, -1.1398], 6); // Centered on UK
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "&copy; OpenStreetMap contributors",
+    let map = L.map('map').setView([52.6369, -1.1398], 6); // UK center
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
-    let sosMarker = null;
+    let marker;
+    const statusDiv = document.getElementById('status');
+    const sosBtn = document.getElementById('sosButton');
+    const cancelBtn = document.getElementById('cancelButton');
 
-    const sosBtn = document.getElementById("sosBtn");
-    const cancelBtn = document.getElementById("cancelBtn");
-    const status = document.getElementById("status");
-    const noteInput = document.getElementById("noteInput");
-
-    sosBtn.addEventListener("click", () => {
+    function triggerSOS() {
       if (!navigator.geolocation) {
-        status.textContent = "Geolocation not supported.";
+        statusDiv.textContent = 'Geolocation not supported';
         return;
       }
 
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const { latitude, longitude } = position.coords;
-          const note = noteInput.value || "No note provided";
+      statusDiv.textContent = 'Sending SOS...';
 
-          if (sosMarker) map.removeLayer(sosMarker);
+      navigator.geolocation.getCurrentPosition((pos) => {
+        const { latitude, longitude } = pos.coords;
+        const note = document.getElementById('note').value || 'No note';
 
-          sosMarker = L.marker([latitude, longitude])
-            .addTo(map)
-            .bindPopup(`<b>SOS!</b><br>${note}`)
-            .openPopup();
+        if (marker) map.removeLayer(marker);
 
-          map.setView([latitude, longitude], 14);
+        marker = L.marker([latitude, longitude])
+          .addTo(map)
+          .bindPopup(`<b>🚨 SOS Active</b><br>${note}`)
+          .openPopup();
 
-          status.textContent = "🚨 SOS Active!";
-          sosBtn.style.display = "none";
-          cancelBtn.style.display = "inline-block";
-        },
-        () => {
-          status.textContent = "Unable to retrieve your location.";
-        }
-      );
-    });
+        map.setView([latitude, longitude], 13);
+        statusDiv.textContent = '🚨 SOS active!';
+        sosBtn.style.display = 'none';
+        cancelBtn.style.display = 'inline-block';
+      }, () => {
+        statusDiv.textContent = 'Unable to get location.';
+      });
+    }
 
-    cancelBtn.addEventListener("click", () => {
-      if (sosMarker) {
-        map.removeLayer(sosMarker);
-        sosMarker = null;
+    function cancelSOS() {
+      if (marker) {
+        map.removeLayer(marker);
+        marker = null;
       }
-
-      noteInput.value = "";
-      status.textContent = "No SOS active";
-      sosBtn.style.display = "inline-block";
-      cancelBtn.style.display = "none";
-    });
+      document.getElementById('note').value = '';
+      statusDiv.textContent = 'No SOS active';
+      sosBtn.style.display = 'inline-block';
+      cancelBtn.style.display = 'none';
+    }
   </script>
 </body>
 </html>
