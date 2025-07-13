@@ -1,90 +1,121 @@
-<!-- HeroAlert Web SOS Trigger Page -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HeroAlert SOS</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HeroAlert Emergency Globe</title>
+  <link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet" />
   <style>
-    body { margin: 0; background: black; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
-    button { font-size: 2em; padding: 1em 2em; background: red; color: white; border: none; border-radius: 8px; cursor: pointer; }
-    #status { margin-top: 2em; font-size: 1em; color: #0f0; text-align: center; max-width: 90%; white-space: pre-line; }
-    #feedback { margin-top: 2em; font-size: 1.2em; text-align: center; animation: pulse 1.5s infinite; color: yellow; }
-    @keyframes pulse {
-      0% { opacity: 0.4; }
-      50% { opacity: 1; }
-      100% { opacity: 0.4; }
+    body {
+      margin: 0;
+      background: black;
+      color: white;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h1 {
+      margin: 1rem 0;
+    }
+    #map {
+      height: 80vh;
+      width: 95vw;
+      border-radius: 10px;
+      margin-bottom: 1rem;
+    }
+    #status {
+      color: yellow;
+      margin-bottom: 1rem;
+    }
+    #controls {
+      display: flex;
+      gap: 1rem;
+    }
+    button {
+      padding: 1rem 1.5rem;
+      font-size: 1rem;
+      border-radius: 5px;
+      border: none;
+      cursor: pointer;
+    }
+    .sos {
+      background: red;
+      color: white;
+    }
+    .cancel {
+      background: gray;
+      color: white;
+      display: none;
+    }
+    #noteInput {
+      margin-bottom: 1rem;
+      padding: 0.5rem;
+      border-radius: 5px;
+      width: 90%;
     }
   </style>
 </head>
 <body>
-  <button id="sosButton" onclick="triggerSOS()">I NEED HELP</button>
-  <div id="status"></div>
-  <div id="feedback" style="display:none;">📡 Sending HeroAlert...
-🎙️ Recording audio...
-📍 Capturing location...
-🛡️ Stay calm. You’re not alone.</div>
-
+  <h1>🌍 HeroAlert Emergency Globe</h1>
+  <div id="map"></div>
+  <div id="status">No SOS active</div>
+  <input type="text" id="noteInput" placeholder="Add a note (optional)" />
+  <div id="controls">
+    <button class="sos" id="sosBtn">🚨 I NEED HELP</button>
+    <button class="cancel" id="cancelBtn">Cancel Alert</button>
+  </div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    async function triggerSOS() {
-      const statusEl = document.getElementById('status');
-      const feedbackEl = document.getElementById('feedback');
-      const button = document.getElementById('sosButton');
+    const sosBtn = document.getElementById('sosBtn');
+    const cancelBtn = document.getElementById('cancelBtn');
+    const statusDiv = document.getElementById('status');
+    const noteInput = document.getElementById('noteInput');
+    let userMarker;
 
-      button.style.display = 'none';
-      feedbackEl.style.display = 'block';
-      statusEl.textContent = 'Triggering HeroAlert...';
+    const map = L.map('map').setView([51.509865, -0.118092], 5); // Center on UK
 
-      // 1. Get Location
-      let locationData = { lat: null, lon: null };
-      try {
-        const position = await new Promise((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject);
-        });
-        locationData.lat = position.coords.latitude;
-        locationData.lon = position.coords.longitude;
-      } catch (err) {
-        console.warn('Location access failed or denied:', err);
-        statusEl.textContent += '\nLocation access denied. Sending SOS without location...';
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    function triggerSOS() {
+      if (!navigator.geolocation) {
+        alert('Geolocation not supported');
+        return;
       }
 
-      // 2. Start audio recording
-      let audioBlob = null;
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const mediaRecorder = new MediaRecorder(stream);
-        const chunks = [];
+      navigator.geolocation.getCurrentPosition(position => {
+        const lat = position.coords.latitude;
+        const lon = position.coords.longitude;
+        const note = noteInput.value || 'No note';
 
-        mediaRecorder.ondataavailable = e => chunks.push(e.data);
+        if (userMarker) map.removeLayer(userMarker);
+        userMarker = L.marker([lat, lon])
+          .addTo(map)
+          .bindPopup(`<b>SOS Alert</b><br>${note}`)
+          .openPopup();
 
-        mediaRecorder.onstop = () => {
-          audioBlob = new Blob(chunks, { type: 'audio/webm' });
-          uploadData(audioBlob, locationData);
-        };
+        map.setView([lat, lon], 13);
 
-        mediaRecorder.start();
-
-        setTimeout(() => {
-          if (mediaRecorder.state !== 'inactive') {
-            mediaRecorder.stop();
-          }
-        }, 5000); // 5 seconds of audio
-      } catch (err) {
-        console.error('Mic access denied or failed:', err);
-        statusEl.textContent += '\nMicrophone access denied. Sending SOS without audio...';
-        uploadData(null, locationData);
-      }
+        statusDiv.innerText = '🚨 SOS Active';
+        sosBtn.style.display = 'none';
+        cancelBtn.style.display = 'inline-block';
+      }, err => {
+        alert('Unable to access location');
+      });
     }
 
-    async function uploadData(audioBlob, locationData) {
-      const statusEl = document.getElementById('status');
-      const feedbackEl = document.getElementById('feedback');
-      statusEl.textContent += '\nSOS sent. Help is on the way.';
-      feedbackEl.textContent = '✅ Alert sent successfully at ' + new Date().toLocaleTimeString() + '\n📍 Location locked\n🎤 Audio captured (if permission granted)\n🛡️ Help is on the way. Stay safe.';
-      console.log('Audio:', audioBlob);
-      console.log('Location:', locationData);
-      // Placeholder: Firebase upload logic
+    function cancelSOS() {
+      if (userMarker) map.removeLayer(userMarker);
+      statusDiv.innerText = 'No SOS active';
+      sosBtn.style.display = 'inline-block';
+      cancelBtn.style.display = 'none';
     }
+
+    sosBtn.addEventListener('click', triggerSOS);
+    cancelBtn.addEventListener('click', cancelSOS);
   </script>
 </body>
 </html>
