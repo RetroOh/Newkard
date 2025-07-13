@@ -17,11 +17,13 @@
       display: flex;
       flex-direction: column;
       align-items: center;
+      justify-content: flex-start;
     }
 
     h1 {
       margin: 1rem;
       font-size: 1.7rem;
+      text-align: center;
     }
 
     #map {
@@ -55,6 +57,7 @@
       margin-top: 0.5rem;
       font-size: 1rem;
       color: yellow;
+      text-align: center;
     }
 
     #noteInput {
@@ -80,12 +83,12 @@
     <button class="btn" id="cancelBtn">❌ Cancel Alert</button>
   </div>
 
+  <!-- ✅ SINGLE status element -->
   <p id="status">No SOS active</p>
 
   <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
   <script>
-    const map = L.map("map").setView([52.6369, -1.1398], 6); // UK center
-
+    const map = L.map("map").setView([52.6369, -1.1398], 6); // Centered on UK
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: "&copy; OpenStreetMap contributors",
     }).addTo(map);
