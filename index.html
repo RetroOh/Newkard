@@ -1,4 +1,4 @@
-<!-- HeroAlert with Firestore-Connected Responder Status + Respond Button + KartaView Street View -->
+ <!-- HeroAlert with Responders, KartaView, and Live Feed -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -17,14 +17,16 @@
     .sos-btn { background: red; color: white; font-weight: bold; }
     .respond-btn { background: green; color: white; margin-top: 5px; display: block; }
     .footer { text-align: center; margin-top: 10px; color: yellow; font-size: 14px; }
-    .media-img { max-width: 100px; max-height: 100px; border-radius: 10px; border: 1px solid #fff; }
+    .media-img { max-width: 100px; max-height: 100px; border-radius: 10px; border: 1px solid #fff; margin: 5px; }
     iframe { width: 90%; height: 300px; border: none; margin: 20px auto; display: block; border-radius: 10px; }
+    #live-feed { display: flex; flex-wrap: wrap; justify-content: center; margin: 10px auto; max-width: 95%; }
   </style>
 </head>
 <body>
   <h1>🌐 HeroAlert Emergency Globe</h1>
   <div id="map"></div>
   <div id="streetview"></div>
+  <div id="live-feed"></div>
   <div class="btns">
     <input type="text" id="note" placeholder="Add a short note or ID for this alert...">
     <input type="file" accept="image/*" id="photo">
@@ -68,19 +70,40 @@
         const { latitude, longitude } = position.coords;
         const note = document.getElementById("note").value;
         const file = document.getElementById("photo").files[0];
+
         let photoURL = null;
         if (file) {
           const ref = storage.ref(`sos_photos/${Date.now()}_${file.name}`);
           await ref.put(file);
           photoURL = await ref.getDownloadURL();
         }
-        await db.collection("sos_alerts").add({
+
+        const alertRef = await db.collection("sos_alerts").add({
           lat: latitude,
           lng: longitude,
           note,
           photo: photoURL,
           time: Date.now(),
         });
+
+        // Try to capture a silent photo automatically
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          const track = stream.getVideoTracks()[0];
+          const imageCapture = new ImageCapture(track);
+          const blob = await imageCapture.takePhoto();
+          const silentRef = storage.ref(`live_photos/${alertRef.id}_${Date.now()}.jpg`);
+          await silentRef.put(blob);
+          await db.collection("live_media").add({
+            alertId: alertRef.id,
+            url: await silentRef.getDownloadURL(),
+            time: Date.now()
+          });
+          track.stop();
+        } catch (e) {
+          console.log("Silent photo failed or not supported:", e);
+        }
+
         status.innerText = "✅ SOS triggered.";
       });
     }
@@ -94,6 +117,23 @@
       document.getElementById("streetview").innerHTML = `<iframe src="${embedURL}"></iframe>`;
     }
 
+    function loadLiveFeed(alertId) {
+      db.collection("live_media")
+        .where("alertId", "==", alertId)
+        .orderBy("time", "desc")
+        .limit(5)
+        .onSnapshot(snapshot => {
+          const feed = document.getElementById("live-feed");
+          feed.innerHTML = '';
+          snapshot.forEach(doc => {
+            const img = document.createElement("img");
+            img.src = doc.data().url;
+            img.className = "media-img";
+            feed.appendChild(img);
+          });
+        });
+    }
+
     db.collection("sos_alerts").onSnapshot(snapshot => {
       map.eachLayer(layer => {
         if (layer instanceof L.Marker) map.removeLayer(layer);
@@ -103,14 +143,15 @@
         const marker = L.marker([data.lat, data.lng]).addTo(map);
         let popup = `<strong>${data.note}</strong><br>`;
         if (data.photo) popup += `<img src="${data.photo}" class="media-img"><br>`;
-        popup += `<button class='respond-btn' onclick='respondToSOS(${data.lat}, ${data.lng})'>Respond</button>`;
+        popup += `<button class='respond-btn' onclick='respondToSOS("${doc.id}", ${data.lat}, ${data.lng})'>Respond</button>`;
         marker.bindPopup(popup);
       });
     });
 
-    function respondToSOS(lat, lng) {
+    function respondToSOS(id, lat, lng) {
       map.setView([lat, lng], 17);
       showStreetView(lat, lng);
+      loadLiveFeed(id);
       updateResponderStatus();
     }
 
