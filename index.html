@@ -1,4 +1,4 @@
- <!-- HeroAlert with Responders, KartaView, and Live Feed -->
+<!-- HeroAlert with SOS Countdown + Live Feed + KartaView -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -78,33 +78,31 @@
           photoURL = await ref.getDownloadURL();
         }
 
+        const now = Date.now();
+        const expire = now + (5 * 60 * 1000); // 5 minutes from now
         const alertRef = await db.collection("sos_alerts").add({
           lat: latitude,
           lng: longitude,
           note,
           photo: photoURL,
-          time: Date.now(),
+          time: now,
+          expire
         });
 
-        // Try to capture a silent photo automatically
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ video: true });
           const track = stream.getVideoTracks()[0];
           const imageCapture = new ImageCapture(track);
           const blob = await imageCapture.takePhoto();
-          const silentRef = storage.ref(`live_photos/${alertRef.id}_${Date.now()}.jpg`);
+          const silentRef = storage.ref(`live_photos/${alertRef.id}_${now}.jpg`);
           await silentRef.put(blob);
-          await db.collection("live_media").add({
-            alertId: alertRef.id,
-            url: await silentRef.getDownloadURL(),
-            time: Date.now()
-          });
+          await db.collection("live_media").add({ alertId: alertRef.id, url: await silentRef.getDownloadURL(), time: now });
           track.stop();
         } catch (e) {
-          console.log("Silent photo failed or not supported:", e);
+          console.log("Silent photo failed:", e);
         }
 
-        status.innerText = "✅ SOS triggered.";
+        status.innerText = "✅ SOS triggered. Auto-expiring in 5 mins.";
       });
     }
 
@@ -140,9 +138,14 @@
       });
       snapshot.forEach(doc => {
         const data = doc.data();
+        const now = Date.now();
+        if (data.expire && now > data.expire) return; // hide expired
+
         const marker = L.marker([data.lat, data.lng]).addTo(map);
         let popup = `<strong>${data.note}</strong><br>`;
         if (data.photo) popup += `<img src="${data.photo}" class="media-img"><br>`;
+        const timeLeft = Math.max(0, Math.floor((data.expire - now) / 1000));
+        popup += `<em>⏱️ Expires in ${Math.floor(timeLeft / 60)}m ${timeLeft % 60}s</em><br>`;
         popup += `<button class='respond-btn' onclick='respondToSOS("${doc.id}", ${data.lat}, ${data.lng})'>Respond</button>`;
         marker.bindPopup(popup);
       });
