@@ -1,4 +1,3 @@
-<!-- HeroAlert with SOS Countdown + Live Feed + KartaView -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -8,34 +7,41 @@
   <style>
     body { margin: 0; background: #000; color: white; font-family: sans-serif; }
     h1 { text-align: center; margin: 10px; }
-    #map { height: 60vh; margin: 0 5%; border-radius: 15px; }
-    .btns { display: flex; justify-content: center; margin-top: 10px; flex-direction: column; align-items: center; }
+    #map { height: 70vh; margin: 0 5%; border-radius: 15px; }
+    .btns { display: flex; flex-direction: column; align-items: center; padding: 10px; }
     input, button, select { padding: 10px; font-size: 16px; margin: 5px; border-radius: 8px; border: none; }
     #note { width: 70%; }
     #photo { display: none; }
-    .cancel-btn { background: gray; color: white; margin-top: 5px; }
+    .cancel-btn { background: gray; color: white; }
     .sos-btn { background: red; color: white; font-weight: bold; }
-    .respond-btn { background: green; color: white; margin-top: 5px; display: block; }
+    .responder-tools { background: #111; padding: 10px; border-radius: 10px; margin: 10px; width: 90%; max-width: 500px; }
     .footer { text-align: center; margin-top: 10px; color: yellow; font-size: 14px; }
-    .media-img { max-width: 100px; max-height: 100px; border-radius: 10px; border: 1px solid #fff; margin: 5px; }
-    iframe { width: 90%; height: 300px; border: none; margin: 20px auto; display: block; border-radius: 10px; }
-    #live-feed { display: flex; flex-wrap: wrap; justify-content: center; margin: 10px auto; max-width: 95%; }
+    .media-img { max-width: 100px; max-height: 100px; border-radius: 10px; border: 1px solid #fff; }
+    .log-box { background: #222; padding: 10px; border-radius: 8px; max-height: 100px; overflow-y: auto; margin-top: 5px; font-size: 13px; }
   </style>
 </head>
 <body>
   <h1>🌐 HeroAlert Emergency Globe</h1>
   <div id="map"></div>
-  <div id="streetview"></div>
-  <div id="live-feed"></div>
   <div class="btns">
     <input type="text" id="note" placeholder="Add a short note or ID for this alert...">
     <input type="file" accept="image/*" id="photo">
     <button onclick="triggerSOS()" class="sos-btn">🚑 I NEED HELP</button>
     <button onclick="cancelSOS()" class="cancel-btn">Cancel Alert</button>
-    <select id="responder-status" onchange="updateResponderStatus()">
-      <option value="available">Responder: Available</option>
-      <option value="en route">Responder: En Route</option>
-    </select>
+
+    <div class="responder-tools">
+      <h3>🛡️ Responder Toolkit</h3>
+      <select id="responder-status" onchange="updateResponderStatus()">
+        <option value="available">Available</option>
+        <option value="en route">En Route</option>
+      </select>
+      <button onclick="confirmResponse()">🚨 Unit En Route</button>
+      <button onclick="recenterMap()">🔁 Recenter to SOS</button>
+      <button onclick="openInMaps()">🧭 Open in Maps</button>
+      <button onclick="openDronePanel()">🕹️ Control Drone</button>
+      <div id="time-since" style="margin-top: 10px;">⏱️ Elapsed: 0s</div>
+      <div class="log-box" id="logBox"></div>
+    </div>
   </div>
   <div class="footer" id="status">No SOS active</div>
 
@@ -45,27 +51,38 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     const firebaseConfig = {
-      apiKey: "AIzaSyDHRnVoA8n0_sApPDcnE48VeC8mWoVEWLA",
-      authDomain: "heroalert-apk.firebaseapp.com",
-      projectId: "heroalert-apk",
-      storageBucket: "heroalert-apk.appspot.com",
-      messagingSenderId: "429832216078",
-      appId: "1:429832216078:web:dbe09a5223e7e82faea65f"
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_AUTH_DOMAIN",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_BUCKET",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
     const storage = firebase.storage();
 
-    const map = L.map('map').setView([53.5, -1.5], 6);
+    const responderId = 'Responder_' + Math.floor(Math.random() * 1000);
+    let map = L.map('map').setView([53.5, -1.5], 6);
+    let latestSOS = null;
+    let elapsedTimer;
+    const logBox = document.getElementById("logBox");
+
+    function logAction(msg) {
+      const time = new Date().toLocaleTimeString();
+      logBox.innerHTML += `🟢 ${time}: ${msg}<br>`;
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
     const status = document.getElementById("status");
-    const responderId = 'Responder_' + Math.floor(Math.random() * 1000);
 
     async function triggerSOS() {
       if (!navigator.geolocation) return alert("Enable location!");
+
       navigator.geolocation.getCurrentPosition(async (position) => {
         const { latitude, longitude } = position.coords;
         const note = document.getElementById("note").value;
@@ -78,58 +95,39 @@
           photoURL = await ref.getDownloadURL();
         }
 
-        const now = Date.now();
-        const expire = now + (5 * 60 * 1000); // 5 minutes from now
-        const alertRef = await db.collection("sos_alerts").add({
+        const alertDoc = await db.collection("sos_alerts").add({
           lat: latitude,
           lng: longitude,
           note,
           photo: photoURL,
-          time: now,
-          expire
+          time: Date.now(),
         });
 
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-          const track = stream.getVideoTracks()[0];
-          const imageCapture = new ImageCapture(track);
-          const blob = await imageCapture.takePhoto();
-          const silentRef = storage.ref(`live_photos/${alertRef.id}_${now}.jpg`);
-          await silentRef.put(blob);
-          await db.collection("live_media").add({ alertId: alertRef.id, url: await silentRef.getDownloadURL(), time: now });
-          track.stop();
-        } catch (e) {
-          console.log("Silent photo failed:", e);
-        }
-
-        status.innerText = "✅ SOS triggered. Auto-expiring in 5 mins.";
+        latestSOS = { lat: latitude, lng: longitude, id: alertDoc.id };
+        status.innerText = "✅ SOS triggered.";
+        startElapsedTime();
+        logAction("SOS Triggered");
       });
     }
 
     function cancelSOS() {
       status.innerText = "No SOS active";
+      stopElapsedTime();
+      logAction("Alert Cancelled");
     }
 
-    function showStreetView(lat, lng) {
-      const embedURL = `https://kartaview.org/map/@${lat},${lng},17z`;
-      document.getElementById("streetview").innerHTML = `<iframe src="${embedURL}"></iframe>`;
+    function startElapsedTime() {
+      let start = Date.now();
+      clearInterval(elapsedTimer);
+      elapsedTimer = setInterval(() => {
+        let sec = Math.floor((Date.now() - start) / 1000);
+        document.getElementById("time-since").innerText = `⏱️ Elapsed: ${sec}s`;
+      }, 1000);
     }
 
-    function loadLiveFeed(alertId) {
-      db.collection("live_media")
-        .where("alertId", "==", alertId)
-        .orderBy("time", "desc")
-        .limit(5)
-        .onSnapshot(snapshot => {
-          const feed = document.getElementById("live-feed");
-          feed.innerHTML = '';
-          snapshot.forEach(doc => {
-            const img = document.createElement("img");
-            img.src = doc.data().url;
-            img.className = "media-img";
-            feed.appendChild(img);
-          });
-        });
+    function stopElapsedTime() {
+      clearInterval(elapsedTimer);
+      document.getElementById("time-since").innerText = "⏱️ Elapsed: 0s";
     }
 
     db.collection("sos_alerts").onSnapshot(snapshot => {
@@ -138,25 +136,13 @@
       });
       snapshot.forEach(doc => {
         const data = doc.data();
-        const now = Date.now();
-        if (data.expire && now > data.expire) return; // hide expired
-
         const marker = L.marker([data.lat, data.lng]).addTo(map);
         let popup = `<strong>${data.note}</strong><br>`;
-        if (data.photo) popup += `<img src="${data.photo}" class="media-img"><br>`;
-        const timeLeft = Math.max(0, Math.floor((data.expire - now) / 1000));
-        popup += `<em>⏱️ Expires in ${Math.floor(timeLeft / 60)}m ${timeLeft % 60}s</em><br>`;
-        popup += `<button class='respond-btn' onclick='respondToSOS("${doc.id}", ${data.lat}, ${data.lng})'>Respond</button>`;
+        if (data.photo) popup += `<img src="${data.photo}" class="media-img">`;
         marker.bindPopup(popup);
+        latestSOS = { lat: data.lat, lng: data.lng, id: doc.id };
       });
     });
-
-    function respondToSOS(id, lat, lng) {
-      map.setView([lat, lng], 17);
-      showStreetView(lat, lng);
-      loadLiveFeed(id);
-      updateResponderStatus();
-    }
 
     db.collection("responders").onSnapshot(snapshot => {
       snapshot.forEach(doc => {
@@ -183,7 +169,32 @@
           updated: Date.now()
         });
         status.innerText = `Responder now marked: ${newStatus.toUpperCase()}`;
+        logAction(`Status set to ${newStatus}`);
       });
+    }
+
+    function confirmResponse() {
+      const now = new Date().toLocaleTimeString();
+      status.innerText = `🚨 UNIT EN ROUTE at ${now}`;
+      logAction("Responder confirmed: UNIT EN ROUTE");
+    }
+
+    function recenterMap() {
+      if (!latestSOS) return alert("No active SOS to center on.");
+      map.setView([latestSOS.lat, latestSOS.lng], 14);
+      logAction("Map Recentered to SOS");
+    }
+
+    function openInMaps() {
+      if (!latestSOS) return alert("No SOS location.");
+      const url = `https://www.google.com/maps/dir/?api=1&destination=${latestSOS.lat},${latestSOS.lng}`;
+      window.open(url, '_blank');
+      logAction("Opened Google Maps");
+    }
+
+    function openDronePanel() {
+      alert("🛸 Drone link acquired. Tactical mode activated.");
+      logAction("Drone Panel Triggered");
     }
   </script>
 </body>
