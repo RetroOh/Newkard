@@ -1,4 +1,4 @@
-<!-- HeroAlert with Drone Panel (Mock) -->
+<!-- HeroAlert with Drone Arrow Key Control -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -17,19 +17,6 @@
     .sos-btn { background: red; color: white; font-weight: bold; }
     .footer { text-align: center; margin-top: 10px; color: yellow; font-size: 14px; }
     .media-img { max-width: 100px; max-height: 100px; border-radius: 10px; border: 1px solid #fff; }
-    #drone-panel {
-      position: fixed;
-      bottom: 0;
-      right: 0;
-      width: 250px;
-      background: #111;
-      border-top-left-radius: 10px;
-      padding: 10px;
-      box-shadow: 0 -2px 10px rgba(255,255,255,0.3);
-      display: none;
-    }
-    #drone-panel h3 { margin-top: 0; color: lightgreen; text-align: center; }
-    .drone-btn { background: #222; color: white; margin: 5px 0; width: 100%; border-radius: 5px; }
   </style>
 </head>
 <body>
@@ -45,18 +32,8 @@
       <option value="en route">Responder: En Route</option>
     </select>
     <button onclick="confirmResponse()" class="sos-btn">🚨 Unit En Route</button>
-    <button onclick="toggleDronePanel()" class="drone-btn">🕹️ Control Drone</button>
   </div>
   <div class="footer" id="status">No SOS active</div>
-
-  <div id="drone-panel">
-    <h3>🛸 Drone Control</h3>
-    <button class="drone-btn" onclick="logAction('Rotate Left')">🔄 Rotate Left</button>
-    <button class="drone-btn" onclick="logAction('Zoom In')">🔍 Zoom In</button>
-    <button class="drone-btn" onclick="logAction('Night Vision Mode')">🌘 Night Vision</button>
-    <button class="drone-btn" onclick="logAction('Return to Base')">↩️ Return to Base</button>
-    <button class="cancel-btn" onclick="toggleDronePanel()">❌ Close Panel</button>
-  </div>
 
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -82,6 +59,8 @@
 
     const status = document.getElementById("status");
     const responderId = 'Responder_' + Math.floor(Math.random() * 1000);
+
+    let droneMarker = L.marker([53.5, -1.5]).addTo(map);
 
     async function triggerSOS() {
       if (!navigator.geolocation) return alert("Enable location!");
@@ -117,26 +96,11 @@
       const msg = `Responder confirmed: UNIT EN ROUTE`;
       status.innerText = msg;
       console.log(msg);
-      appendToLog(msg);
-    }
-
-    function appendToLog(text) {
-      const logBox = document.getElementById("status");
-      logBox.innerText = `${logBox.innerText}\n${text}`;
-    }
-
-    function toggleDronePanel() {
-      const panel = document.getElementById("drone-panel");
-      panel.style.display = panel.style.display === "none" ? "block" : "none";
-    }
-
-    function logAction(action) {
-      appendToLog(`Drone Panel Triggered: ${action}`);
     }
 
     db.collection("sos_alerts").onSnapshot(snapshot => {
       map.eachLayer(layer => {
-        if (layer instanceof L.Marker) map.removeLayer(layer);
+        if (layer instanceof L.Marker && layer !== droneMarker) map.removeLayer(layer);
       });
       snapshot.forEach(doc => {
         const data = doc.data();
@@ -174,6 +138,23 @@
         status.innerText = `Responder now marked: ${newStatus.toUpperCase()}`;
       });
     }
+
+    // Arrow key drone movement
+    document.addEventListener('keydown', (e) => {
+      const pos = droneMarker.getLatLng();
+      let lat = pos.lat;
+      let lng = pos.lng;
+      const step = 0.01;
+      switch (e.key) {
+        case 'ArrowUp': lat += step; break;
+        case 'ArrowDown': lat -= step; break;
+        case 'ArrowLeft': lng -= step; break;
+        case 'ArrowRight': lng += step; break;
+        default: return;
+      }
+      droneMarker.setLatLng([lat, lng]);
+      status.innerText = `🛸 Drone moved to: (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+    });
   </script>
 </body>
 </html>
