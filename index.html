@@ -1,3 +1,4 @@
+<!-- HeroAlert with Drone Panel (Mock) -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -7,17 +8,28 @@
   <style>
     body { margin: 0; background: #000; color: white; font-family: sans-serif; }
     h1 { text-align: center; margin: 10px; }
-    #map { height: 70vh; margin: 0 5%; border-radius: 15px; }
-    .btns { display: flex; flex-direction: column; align-items: center; padding: 10px; }
+    #map { height: 80vh; margin: 0 5%; border-radius: 15px; }
+    .btns { display: flex; justify-content: center; margin-top: 10px; flex-direction: column; align-items: center; }
     input, button, select { padding: 10px; font-size: 16px; margin: 5px; border-radius: 8px; border: none; }
     #note { width: 70%; }
     #photo { display: none; }
-    .cancel-btn { background: gray; color: white; }
+    .cancel-btn { background: gray; color: white; margin-top: 5px; }
     .sos-btn { background: red; color: white; font-weight: bold; }
-    .responder-tools { background: #111; padding: 10px; border-radius: 10px; margin: 10px; width: 90%; max-width: 500px; }
     .footer { text-align: center; margin-top: 10px; color: yellow; font-size: 14px; }
     .media-img { max-width: 100px; max-height: 100px; border-radius: 10px; border: 1px solid #fff; }
-    .log-box { background: #222; padding: 10px; border-radius: 8px; max-height: 100px; overflow-y: auto; margin-top: 5px; font-size: 13px; }
+    #drone-panel {
+      position: fixed;
+      bottom: 0;
+      right: 0;
+      width: 250px;
+      background: #111;
+      border-top-left-radius: 10px;
+      padding: 10px;
+      box-shadow: 0 -2px 10px rgba(255,255,255,0.3);
+      display: none;
+    }
+    #drone-panel h3 { margin-top: 0; color: lightgreen; text-align: center; }
+    .drone-btn { background: #222; color: white; margin: 5px 0; width: 100%; border-radius: 5px; }
   </style>
 </head>
 <body>
@@ -28,22 +40,23 @@
     <input type="file" accept="image/*" id="photo">
     <button onclick="triggerSOS()" class="sos-btn">🚑 I NEED HELP</button>
     <button onclick="cancelSOS()" class="cancel-btn">Cancel Alert</button>
-
-    <div class="responder-tools">
-      <h3>🛡️ Responder Toolkit</h3>
-      <select id="responder-status" onchange="updateResponderStatus()">
-        <option value="available">Available</option>
-        <option value="en route">En Route</option>
-      </select>
-      <button onclick="confirmResponse()">🚨 Unit En Route</button>
-      <button onclick="recenterMap()">🔁 Recenter to SOS</button>
-      <button onclick="openInMaps()">🧭 Open in Maps</button>
-      <button onclick="openDronePanel()">🕹️ Control Drone</button>
-      <div id="time-since" style="margin-top: 10px;">⏱️ Elapsed: 0s</div>
-      <div class="log-box" id="logBox"></div>
-    </div>
+    <select id="responder-status" onchange="updateResponderStatus()">
+      <option value="available">Responder: Available</option>
+      <option value="en route">Responder: En Route</option>
+    </select>
+    <button onclick="confirmResponse()" class="sos-btn">🚨 Unit En Route</button>
+    <button onclick="toggleDronePanel()" class="drone-btn">🕹️ Control Drone</button>
   </div>
   <div class="footer" id="status">No SOS active</div>
+
+  <div id="drone-panel">
+    <h3>🛸 Drone Control</h3>
+    <button class="drone-btn" onclick="logAction('Rotate Left')">🔄 Rotate Left</button>
+    <button class="drone-btn" onclick="logAction('Zoom In')">🔍 Zoom In</button>
+    <button class="drone-btn" onclick="logAction('Night Vision Mode')">🌘 Night Vision</button>
+    <button class="drone-btn" onclick="logAction('Return to Base')">↩️ Return to Base</button>
+    <button class="cancel-btn" onclick="toggleDronePanel()">❌ Close Panel</button>
+  </div>
 
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -62,23 +75,13 @@
     const db = firebase.firestore();
     const storage = firebase.storage();
 
-    const responderId = 'Responder_' + Math.floor(Math.random() * 1000);
-    let map = L.map('map').setView([53.5, -1.5], 6);
-    let latestSOS = null;
-    let elapsedTimer;
-    const logBox = document.getElementById("logBox");
-
-    function logAction(msg) {
-      const time = new Date().toLocaleTimeString();
-      logBox.innerHTML += `🟢 ${time}: ${msg}<br>`;
-      logBox.scrollTop = logBox.scrollHeight;
-    }
-
+    const map = L.map('map').setView([53.5, -1.5], 6);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
     const status = document.getElementById("status");
+    const responderId = 'Responder_' + Math.floor(Math.random() * 1000);
 
     async function triggerSOS() {
       if (!navigator.geolocation) return alert("Enable location!");
@@ -95,39 +98,40 @@
           photoURL = await ref.getDownloadURL();
         }
 
-        const alertDoc = await db.collection("sos_alerts").add({
+        await db.collection("sos_alerts").add({
           lat: latitude,
           lng: longitude,
           note,
           photo: photoURL,
           time: Date.now(),
         });
-
-        latestSOS = { lat: latitude, lng: longitude, id: alertDoc.id };
         status.innerText = "✅ SOS triggered.";
-        startElapsedTime();
-        logAction("SOS Triggered");
       });
     }
 
     function cancelSOS() {
       status.innerText = "No SOS active";
-      stopElapsedTime();
-      logAction("Alert Cancelled");
     }
 
-    function startElapsedTime() {
-      let start = Date.now();
-      clearInterval(elapsedTimer);
-      elapsedTimer = setInterval(() => {
-        let sec = Math.floor((Date.now() - start) / 1000);
-        document.getElementById("time-since").innerText = `⏱️ Elapsed: ${sec}s`;
-      }, 1000);
+    function confirmResponse() {
+      const msg = `Responder confirmed: UNIT EN ROUTE`;
+      status.innerText = msg;
+      console.log(msg);
+      appendToLog(msg);
     }
 
-    function stopElapsedTime() {
-      clearInterval(elapsedTimer);
-      document.getElementById("time-since").innerText = "⏱️ Elapsed: 0s";
+    function appendToLog(text) {
+      const logBox = document.getElementById("status");
+      logBox.innerText = `${logBox.innerText}\n${text}`;
+    }
+
+    function toggleDronePanel() {
+      const panel = document.getElementById("drone-panel");
+      panel.style.display = panel.style.display === "none" ? "block" : "none";
+    }
+
+    function logAction(action) {
+      appendToLog(`Drone Panel Triggered: ${action}`);
     }
 
     db.collection("sos_alerts").onSnapshot(snapshot => {
@@ -140,7 +144,6 @@
         let popup = `<strong>${data.note}</strong><br>`;
         if (data.photo) popup += `<img src="${data.photo}" class="media-img">`;
         marker.bindPopup(popup);
-        latestSOS = { lat: data.lat, lng: data.lng, id: doc.id };
       });
     });
 
@@ -169,32 +172,7 @@
           updated: Date.now()
         });
         status.innerText = `Responder now marked: ${newStatus.toUpperCase()}`;
-        logAction(`Status set to ${newStatus}`);
       });
-    }
-
-    function confirmResponse() {
-      const now = new Date().toLocaleTimeString();
-      status.innerText = `🚨 UNIT EN ROUTE at ${now}`;
-      logAction("Responder confirmed: UNIT EN ROUTE");
-    }
-
-    function recenterMap() {
-      if (!latestSOS) return alert("No active SOS to center on.");
-      map.setView([latestSOS.lat, latestSOS.lng], 14);
-      logAction("Map Recentered to SOS");
-    }
-
-    function openInMaps() {
-      if (!latestSOS) return alert("No SOS location.");
-      const url = `https://www.google.com/maps/dir/?api=1&destination=${latestSOS.lat},${latestSOS.lng}`;
-      window.open(url, '_blank');
-      logAction("Opened Google Maps");
-    }
-
-    function openDronePanel() {
-      alert("🛸 Drone link acquired. Tactical mode activated.");
-      logAction("Drone Panel Triggered");
     }
   </script>
 </body>
