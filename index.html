@@ -1,4 +1,4 @@
-<!-- HeroAlert with Drone Arrow Key Control -->
+<!-- HeroAlert with Drone + SOS Fixes -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -31,7 +31,6 @@
       <option value="available">Responder: Available</option>
       <option value="en route">Responder: En Route</option>
     </select>
-    <button onclick="confirmResponse()" class="sos-btn">🚨 Unit En Route</button>
   </div>
   <div class="footer" id="status">No SOS active</div>
 
@@ -59,8 +58,18 @@
 
     const status = document.getElementById("status");
     const responderId = 'Responder_' + Math.floor(Math.random() * 1000);
+    let droneMarker;
 
-    let droneMarker = L.marker([53.5, -1.5]).addTo(map);
+    navigator.geolocation.getCurrentPosition((pos) => {
+      const { latitude, longitude } = pos.coords;
+      droneMarker = L.marker([latitude, longitude], {
+        icon: L.icon({
+          iconUrl: 'https://cdn-icons-png.flaticon.com/512/2204/2204346.png',
+          iconSize: [30, 30], iconAnchor: [15, 30],
+        })
+      }).addTo(map);
+      map.setView([latitude, longitude], 14);
+    });
 
     async function triggerSOS() {
       if (!navigator.geolocation) return alert("Enable location!");
@@ -92,22 +101,17 @@
       status.innerText = "No SOS active";
     }
 
-    function confirmResponse() {
-      const msg = `Responder confirmed: UNIT EN ROUTE`;
-      status.innerText = msg;
-      console.log(msg);
-    }
-
     db.collection("sos_alerts").onSnapshot(snapshot => {
       map.eachLayer(layer => {
-        if (layer instanceof L.Marker && layer !== droneMarker) map.removeLayer(layer);
+        if (layer instanceof L.Marker) map.removeLayer(layer);
       });
       snapshot.forEach(doc => {
         const data = doc.data();
         const marker = L.marker([data.lat, data.lng]).addTo(map);
         let popup = `<strong>${data.note}</strong><br>`;
         if (data.photo) popup += `<img src="${data.photo}" class="media-img">`;
-        marker.bindPopup(popup);
+        marker.bindPopup(popup).openPopup();
+        map.setView([data.lat, data.lng], 14);
       });
     });
 
@@ -116,8 +120,7 @@
         const res = doc.data();
         const icon = L.icon({
           iconUrl: 'https://cdn-icons-png.flaticon.com/512/2204/2204346.png',
-          iconSize: [30, 30],
-          iconAnchor: [15, 30],
+          iconSize: [30, 30], iconAnchor: [15, 30],
         });
         const marker = L.marker([res.lat, res.lng], { icon }).addTo(map);
         marker.bindPopup(`🚑 ${res.id}<br>Status: ${res.status}`);
@@ -138,23 +141,6 @@
         status.innerText = `Responder now marked: ${newStatus.toUpperCase()}`;
       });
     }
-
-    // Arrow key drone movement
-    document.addEventListener('keydown', (e) => {
-      const pos = droneMarker.getLatLng();
-      let lat = pos.lat;
-      let lng = pos.lng;
-      const step = 0.01;
-      switch (e.key) {
-        case 'ArrowUp': lat += step; break;
-        case 'ArrowDown': lat -= step; break;
-        case 'ArrowLeft': lng -= step; break;
-        case 'ArrowRight': lng += step; break;
-        default: return;
-      }
-      droneMarker.setLatLng([lat, lng]);
-      status.innerText = `🛸 Drone moved to: (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
-    });
   </script>
 </body>
 </html>
